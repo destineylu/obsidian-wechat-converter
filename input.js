@@ -76,8 +76,10 @@ const { stripMarkdownFrontmatter } = require('./services/markdown-utils');
 const { mapAppUrlImagesToAssetUrls } = require('./services/article-image-assets');
 
 // 视图类型标识
-const APPLE_STYLE_VIEW = 'apple-style-converter';
+const APPLE_STYLE_VIEW = 'wechat-converter-view';
+const LEGACY_APPLE_STYLE_VIEW_TYPES = ['apple-style-converter'];
 const APPLE_STYLE_VIEW_TITLE = 'Obsidian 发布助手';
+const APPLE_STYLE_VIEW_ICON = 'message-square';
 const OBSIDIAN_PUBLISHER_PRO_URL = 'https://xiaoweibox.top/obsidian-publisher/pro/';
 const OBSIDIAN_PUBLISHER_GUIDE_URL = 'https://xiaoweibox.top/obsidian-publisher/guide/';
 const OBSIDIAN_PUBLISHER_EXTENSION_GUIDE_URL = `${OBSIDIAN_PUBLISHER_GUIDE_URL}?from=obsidian-plugin#install-extension`;
@@ -721,7 +723,7 @@ class AppleStyleView extends ItemView {
   }
 
   getIcon() {
-    return 'wand';
+    return APPLE_STYLE_VIEW_ICON;
   }
 
   async onOpen() {
@@ -1534,18 +1536,53 @@ class AppleStyleView extends ItemView {
    */
   getFrontmatterPublishMeta(activeFile) {
     if (!activeFile) {
-      return { excerpt: '', cover: '', cover_dir: '', coverSrc: null };
+      return {
+        title: '',
+        author: '',
+        excerpt: '',
+        contentSourceUrl: '',
+        cover: '',
+        cover_dir: '',
+        coverSrc: null,
+        thumbMediaId: '',
+        openComment: null,
+        onlyFansCanComment: null,
+      };
     }
 
     const frontmatter = this.app.metadataCache.getFileCache(activeFile)?.frontmatter;
-    const excerpt = this.getFrontmatterString(frontmatter, ['excerpt']);
-    const cover = this.getFrontmatterString(frontmatter, ['cover']);
-    const cover_dir = this.getFrontmatterString(frontmatter, ['cover_dir', 'coverDir', 'cover-dir', 'coverdir', 'CoverDIR']);
+    const title = this.getFrontmatterString(frontmatter, ['title', '标题']);
+    const author = this.getFrontmatterString(frontmatter, ['author', '作者']);
+    const excerpt = this.getFrontmatterString(frontmatter, ['excerpt', 'digest', 'summary', '摘要']);
+    const contentSourceUrl = this.getFrontmatterString(frontmatter, [
+      'content_source_url',
+      'contentSourceUrl',
+      'source_url',
+      'sourceUrl',
+      'original_url',
+      '原文地址',
+    ]);
+    const cover = this.getFrontmatterString(frontmatter, ['cover', '封面']);
+    const cover_dir = this.getFrontmatterString(frontmatter, ['cover_dir', 'coverDir', 'cover-dir', 'coverdir', 'CoverDIR', '封面目录']);
+    const thumbMediaId = this.getFrontmatterString(frontmatter, ['thumb_media_id', 'thumbMediaId', 'thumb-media-id', '封面素材ID']);
+    const openComment = this.getFrontmatterBoolean(frontmatter, ['openComment', 'need_open_comment', 'needOpenComment', '打开评论']);
+    const onlyFansCanComment = this.getFrontmatterBoolean(frontmatter, ['onlyFansCanComment', 'only_fans_can_comment', '仅粉丝可评论']);
 
     // 解析失败时静默回退：返回 null，不中断流程
     const coverSrc = cover ? this.resolveVaultPathToResourceSrc(cover) : null;
 
-    return { excerpt, cover, cover_dir, coverSrc };
+    return {
+      title,
+      author,
+      excerpt,
+      contentSourceUrl,
+      cover,
+      cover_dir,
+      coverSrc,
+      thumbMediaId,
+      openComment,
+      onlyFansCanComment,
+    };
   }
 
   getFrontmatterString(frontmatter, keys) {
@@ -1555,15 +1592,53 @@ class AppleStyleView extends ItemView {
     const normalizedTargets = new Set(keys.map(key => this.normalizeFrontmatterKey(key)));
     for (const key of keys) {
       const value = frontmatter[key];
+      if (Array.isArray(value)) {
+        const first = value.find((item) => typeof item === 'string' && item.trim());
+        if (first) return first.trim();
+      }
       if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
     }
 
     for (const [key, value] of Object.entries(frontmatter)) {
       if (!normalizedTargets.has(this.normalizeFrontmatterKey(key))) continue;
+      if (Array.isArray(value)) {
+        const first = value.find((item) => typeof item === 'string' && item.trim());
+        if (first) return first.trim();
+      }
       if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
     }
 
     return '';
+  }
+
+  getFrontmatterBoolean(frontmatter, keys) {
+    if (!frontmatter || typeof frontmatter !== 'object') return null;
+    if (!Array.isArray(keys) || keys.length === 0) return null;
+
+    const normalizeValue = (value) => {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'number') return value !== 0;
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['true', 'yes', 'y', '1', 'on', '打开', '开启', '是'].includes(normalized)) return true;
+        if (['false', 'no', 'n', '0', 'off', '关闭', '否'].includes(normalized)) return false;
+      }
+      return null;
+    };
+
+    const normalizedTargets = new Set(keys.map(key => this.normalizeFrontmatterKey(key)));
+    for (const key of keys) {
+      const parsed = normalizeValue(frontmatter[key]);
+      if (parsed !== null) return parsed;
+    }
+    for (const [key, value] of Object.entries(frontmatter)) {
+      if (!normalizedTargets.has(this.normalizeFrontmatterKey(key))) continue;
+      const parsed = normalizeValue(value);
+      if (parsed !== null) return parsed;
+    }
+    return null;
   }
 
   normalizeFrontmatterKey(key) {
@@ -3989,7 +4064,7 @@ class AppleStyleView extends ItemView {
 
     // 封面逻辑：优先使用缓存 -> frontmatter.cover -> 文章第一张图
     let coverBase64 = cachedState?.coverBase64 || frontmatterMeta.coverSrc || this.getFirstImageFromArticle();
-    let thumbMediaId = cachedState?.thumbMediaId || '';
+    let thumbMediaId = cachedState?.thumbMediaId || frontmatterMeta.thumbMediaId || '';
     let materialCover = cachedState?.materialCover || null;
 
     // 更新 sessionCoverBase64 以便 onSyncToWechat 使用
@@ -6997,13 +7072,21 @@ class AppleStylePlugin extends Plugin {
       (leaf) => new AppleStyleView(leaf, this)
     );
 
-    this.addRibbonIcon('wand', APPLE_STYLE_VIEW_TITLE, async () => {
+    this.addRibbonIcon(APPLE_STYLE_VIEW_ICON, APPLE_STYLE_VIEW_TITLE, async () => {
       await this.openConverter();
     });
 
     this.addCommand({
-      id: 'open-apple-converter',
+      id: 'open-wechat-converter',
       name: `打开${APPLE_STYLE_VIEW_TITLE}`,
+      callback: async () => {
+        await this.openConverter();
+      },
+    });
+
+    this.addCommand({
+      id: 'open-wechat-converter-en',
+      name: 'Open Wechat Converter',
       callback: async () => {
         await this.openConverter();
       },
@@ -7029,6 +7112,7 @@ class AppleStylePlugin extends Plugin {
     // Command 'convert-to-apple-style' removed as per user request
 
     this.addSettingTab(new AppleStyleSettingTab(this.app, this));
+    this.registerPublishContextMenus();
 
     this.app.workspace.onLayoutReady(() => {
       this.migrateLegacyConverterLeafTitles().catch((error) => {
@@ -7060,14 +7144,18 @@ class AppleStylePlugin extends Plugin {
       ...safeState,
       type: APPLE_STYLE_VIEW,
       state: (safeState.state && typeof safeState.state === 'object') ? safeState.state : {},
-      icon: 'wand',
+      icon: APPLE_STYLE_VIEW_ICON,
       title: APPLE_STYLE_VIEW_TITLE,
       active: shouldActivate,
     };
   }
 
   async migrateLegacyConverterLeafTitles() {
-    const leaves = this.app.workspace.getLeavesOfType(APPLE_STYLE_VIEW);
+    const viewTypes = [APPLE_STYLE_VIEW, ...LEGACY_APPLE_STYLE_VIEW_TYPES];
+    const leaves = viewTypes.flatMap((type) => {
+      const found = this.app.workspace.getLeavesOfType(type);
+      return Array.isArray(found) ? found : [];
+    });
     if (!Array.isArray(leaves) || leaves.length === 0) return;
 
     for (const leaf of leaves) {
@@ -7081,6 +7169,12 @@ class AppleStylePlugin extends Plugin {
 
   async openConverter() {
     let leaf = this.app.workspace.getLeavesOfType(APPLE_STYLE_VIEW)[0];
+    if (!leaf) {
+      for (const legacyViewType of LEGACY_APPLE_STYLE_VIEW_TYPES) {
+        leaf = this.app.workspace.getLeavesOfType(legacyViewType)[0];
+        if (leaf) break;
+      }
+    }
 
     if (!leaf) {
       const targetLeaf = isMobileClient(this.app)
@@ -7107,6 +7201,229 @@ class AppleStylePlugin extends Plugin {
       return leaves[0].view;
     }
     return null;
+  }
+
+  isMarkdownFileLike(file) {
+    if (!file || typeof file !== 'object') return false;
+    const extension = String(file.extension || '').toLowerCase();
+    if (extension) return extension === 'md';
+    return typeof file.path === 'string' && /\.md$/i.test(file.path);
+  }
+
+  collectMarkdownFiles(target) {
+    const files = [];
+    const visit = (item) => {
+      if (!item || typeof item !== 'object') return;
+      if (Array.isArray(item)) {
+        item.forEach(visit);
+        return;
+      }
+      if (this.isMarkdownFileLike(item)) {
+        files.push(item);
+        return;
+      }
+      if (Array.isArray(item.children)) {
+        item.children.forEach(visit);
+      }
+    };
+    visit(target);
+    return files.sort((a, b) => String(a.path || '').localeCompare(String(b.path || '')));
+  }
+
+  async readMarkdownFile(file) {
+    if (this.app?.vault && typeof this.app.vault.read === 'function') {
+      return this.app.vault.read(file);
+    }
+    return '';
+  }
+
+  async openFileInWorkspace(file) {
+    if (!file || !this.app?.workspace) return false;
+    const leaf = this.app.workspace.getLeaf?.(false);
+    if (leaf && typeof leaf.openFile === 'function') {
+      await leaf.openFile(file);
+      return true;
+    }
+    if (typeof this.app.workspace.openLinkText === 'function' && file.path) {
+      await this.app.workspace.openLinkText(file.path, '', false);
+      return true;
+    }
+    return false;
+  }
+
+  async confirmMergeFileOrder(files) {
+    if (!Array.isArray(files) || files.length <= 1) return files;
+    const { Modal } = require('obsidian');
+    if (typeof Modal !== 'function') return files;
+
+    return new Promise((resolve) => {
+      const modal = new Modal(this.app);
+      let orderedFiles = Array.from(files);
+      let settled = false;
+
+      const finish = (nextFiles) => {
+        if (settled) return;
+        settled = true;
+        modal.close();
+        resolve(nextFiles);
+      };
+
+      modal.titleEl.setText('合并发布顺序');
+      modal.contentEl.addClass('wechat-merge-order-modal');
+      modal.contentEl.createEl('p', {
+        cls: 'wechat-merge-order-hint',
+        text: '调整多篇笔记合并为一篇发布稿时的先后顺序。',
+      });
+
+      const listEl = modal.contentEl.createDiv({ cls: 'wechat-merge-order-list' });
+      const renderList = () => {
+        listEl.empty();
+        orderedFiles.forEach((file, index) => {
+          const row = listEl.createDiv({ cls: 'wechat-merge-order-row' });
+          row.createEl('span', {
+            cls: 'wechat-merge-order-index',
+            text: String(index + 1),
+          });
+          row.createEl('span', {
+            cls: 'wechat-merge-order-title',
+            text: file.basename || file.name || file.path || '未命名文章',
+          });
+          const actions = row.createDiv({ cls: 'wechat-merge-order-actions' });
+          const upBtn = actions.createEl('button', { text: '上移' });
+          upBtn.disabled = index === 0;
+          upBtn.onclick = () => {
+            if (index === 0) return;
+            const next = Array.from(orderedFiles);
+            [next[index - 1], next[index]] = [next[index], next[index - 1]];
+            orderedFiles = next;
+            renderList();
+          };
+          const downBtn = actions.createEl('button', { text: '下移' });
+          downBtn.disabled = index === orderedFiles.length - 1;
+          downBtn.onclick = () => {
+            if (index >= orderedFiles.length - 1) return;
+            const next = Array.from(orderedFiles);
+            [next[index + 1], next[index]] = [next[index], next[index + 1]];
+            orderedFiles = next;
+            renderList();
+          };
+        });
+      };
+
+      renderList();
+
+      const btnRow = modal.contentEl.createDiv({ cls: 'wechat-modal-buttons' });
+      const cancelBtn = btnRow.createEl('button', { text: '取消' });
+      cancelBtn.onclick = () => finish([]);
+      const confirmBtn = btnRow.createEl('button', { text: '按此顺序合并', cls: 'mod-cta' });
+      confirmBtn.onclick = () => finish(orderedFiles);
+      modal.onClose = () => {
+        if (!settled) finish([]);
+      };
+      modal.open();
+    });
+  }
+
+  async openFilesInPublishAssistant(target, options = {}) {
+    let files = this.collectMarkdownFiles(target);
+    if (files.length === 0) {
+      new Notice('请选择 Markdown 文件再发布');
+      return false;
+    }
+
+    const merge = options.merge === true && files.length > 1;
+    if (merge && options.confirmOrder === true) {
+      files = await this.confirmMergeFileOrder(files);
+      if (!files.length) return false;
+    }
+    await this.openConverter();
+    const view = this.getConverterView();
+    if (!view || typeof view.convertCurrent !== 'function' || typeof view.showSyncModal !== 'function') {
+      new Notice('发布助手还没有准备好，请稍后重试');
+      return false;
+    }
+
+    if (merge) {
+      const parts = [];
+      for (const file of files) {
+        const markdown = await this.readMarkdownFile(file);
+        const title = String(file.basename || file.name || file.path || '未命名文章').replace(/\.md$/i, '');
+        parts.push(`# ${title}\n\n${markdown}`);
+      }
+      const sourcePath = files.map((file) => file.path || file.name || '').filter(Boolean).join(' + ');
+      await view.convertCurrent(true, {
+        showLoading: true,
+        loadingText: '正在合并文章预览...',
+        sourceOverride: {
+          markdown: parts.join('\n\n---\n\n'),
+          sourcePath,
+        },
+      });
+      await view.showSyncModal();
+      return true;
+    }
+
+    const file = files[0];
+    await this.openFileInWorkspace(file);
+    const markdown = await this.readMarkdownFile(file);
+    await view.convertCurrent(true, {
+      showLoading: true,
+      loadingText: '正在准备文章预览...',
+      sourceOverride: {
+        markdown,
+        sourcePath: file.path || file.name || '',
+      },
+    });
+    await view.showSyncModal();
+    return true;
+  }
+
+  registerPublishContextMenus() {
+    const register = (eventRef) => {
+      if (eventRef && typeof this.registerEvent === 'function') {
+        this.registerEvent(eventRef);
+      }
+    };
+
+    register(this.app.workspace.on('file-menu', (menu, file) => {
+      menu.addItem((item) => {
+        item
+          .setTitle('用发布助手发布')
+          .setIcon('message-square')
+          .onClick(async () => {
+            await this.openFilesInPublishAssistant(file);
+          });
+      });
+
+      menu.addItem((item) => {
+        item
+          .setTitle('合并到发布助手')
+          .setIcon('copy-plus')
+          .onClick(async () => {
+            await this.openFilesInPublishAssistant(file, { merge: true, confirmOrder: true });
+          });
+      });
+    }));
+
+    register(this.app.workspace.on('files-menu', (menu, files) => {
+      menu.addItem((item) => {
+        item
+          .setTitle('用发布助手发布')
+          .setIcon('message-square')
+          .onClick(async () => {
+            await this.openFilesInPublishAssistant(files);
+          });
+      });
+
+      menu.addItem((item) => {
+        item
+          .setTitle('合并到发布助手')
+          .setIcon('copy-plus')
+          .onClick(async () => {
+            await this.openFilesInPublishAssistant(files, { merge: true, confirmOrder: true });
+          });
+      });
+    }));
   }
 
   getWechatSyncBridgeService() {

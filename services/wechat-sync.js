@@ -150,23 +150,29 @@ function createWechatSyncService(deps) {
       const cleanedResult = replaceUnuploadedDraftImagesWithPlaceholders(cleanHtmlForDraft(processedHtml));
       const cleanedHtml = cleanedResult.html;
 
-      const title = activeFile ? activeFile.basename : '无标题文章';
+      const title = String(publishMeta?.title || (activeFile ? activeFile.basename : '无标题文章')).trim() || '无标题文章';
       const article = {
         title: title.substring(0, 64),
         content: cleanedHtml,
         thumb_media_id: thumbMediaId,
-        author: account.author || '',
+        author: publishMeta?.author || account.author || '',
         digest: sessionDigest || '一键同步自 Obsidian',
       };
-      const contentSourceUrl = String(account.contentSourceUrl || '').trim();
+      const contentSourceUrl = String(publishMeta?.contentSourceUrl || account.contentSourceUrl || '').trim();
       if (contentSourceUrl) {
         article.content_source_url = contentSourceUrl;
       }
-      if (typeof account.openComment === 'boolean') {
-        article.need_open_comment = account.openComment ? 1 : 0;
+      const openComment = typeof publishMeta?.openComment === 'boolean'
+        ? publishMeta.openComment
+        : account.openComment;
+      if (typeof openComment === 'boolean') {
+        article.need_open_comment = openComment ? 1 : 0;
       }
-      if (typeof account.onlyFansCanComment === 'boolean') {
-        article.only_fans_can_comment = account.onlyFansCanComment ? 1 : 0;
+      const onlyFansCanComment = typeof publishMeta?.onlyFansCanComment === 'boolean'
+        ? publishMeta.onlyFansCanComment
+        : account.onlyFansCanComment;
+      if (typeof onlyFansCanComment === 'boolean') {
+        article.only_fans_can_comment = onlyFansCanComment ? 1 : 0;
       }
 
       if (onStatus) onStatus('draft');

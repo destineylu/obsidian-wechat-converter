@@ -118,6 +118,32 @@ describe('AppleStyleView - Frontmatter Meta & Configured Directory Cleanup', () 
     expect(meta.cover_dir).toBe('published/post_img');
   });
 
+  it('should read NoteToMP-style Chinese frontmatter aliases', () => {
+    frontmatter = {
+      '标题': '中文标题',
+      '作者': '作者名',
+      '摘要': ['第一条摘要', '第二条摘要'],
+      '原文地址': 'https://example.com/original',
+      '封面': 'published/post_img/post-cover.jpg',
+      '封面素材ID': 'thumb-123',
+      '打开评论': '是',
+      '仅粉丝可评论': '否',
+    };
+    view.app.metadataCache.getFileCache = vi.fn(() => ({ frontmatter }));
+
+    const meta = view.getFrontmatterPublishMeta(activeFile);
+
+    expect(meta.title).toBe('中文标题');
+    expect(meta.author).toBe('作者名');
+    expect(meta.excerpt).toBe('第一条摘要');
+    expect(meta.contentSourceUrl).toBe('https://example.com/original');
+    expect(meta.cover).toBe('published/post_img/post-cover.jpg');
+    expect(meta.coverSrc).toBe('app://local/published/post_img/post-cover.jpg');
+    expect(meta.thumbMediaId).toBe('thumb-123');
+    expect(meta.openComment).toBe(true);
+    expect(meta.onlyFansCanComment).toBe(false);
+  });
+
   it('should resolve cleanup directory with {{note}} placeholder', () => {
     plugin.settings.cleanupDirTemplate = 'published/{{note}}_img';
     const resolved = view.resolveCleanupDirPath(activeFile);

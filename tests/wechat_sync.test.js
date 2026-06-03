@@ -296,6 +296,53 @@ describe('Wechat Sync Service', () => {
     }));
   });
 
+  it('should let frontmatter publish metadata override account draft defaults', async () => {
+    const api = createMockApi();
+    const service = createWechatSyncService({
+      createApi: vi.fn(() => api),
+      srcToBlob: vi.fn(),
+      prepareHtmlForDraft: vi.fn(async (html) => html),
+      processAllImages: vi.fn(async () => '<p>x</p>'),
+      processMathFormulas: vi.fn(async () => '<p>x</p>'),
+      cleanHtmlForDraft: vi.fn((html) => html),
+      cleanupConfiguredDirectory: vi.fn(async () => ({ attempted: false })),
+      getFirstImageFromArticle: vi.fn(() => 'app://fallback-cover'),
+    });
+
+    await service.syncToDraft({
+      account: {
+        appId: 'wx1',
+        appSecret: 'sec',
+        author: 'account-author',
+        contentSourceUrl: 'https://example.com/account',
+        openComment: false,
+        onlyFansCanComment: false,
+      },
+      proxyUrl: '',
+      currentHtml: '<p>x</p>',
+      activeFile: { basename: 'note-title' },
+      publishMeta: {
+        title: 'frontmatter title',
+        author: 'frontmatter author',
+        contentSourceUrl: 'https://example.com/frontmatter',
+        openComment: true,
+        onlyFansCanComment: true,
+      },
+      sessionThumbMediaId: 'thumb-from-frontmatter',
+      sessionDigest: 'digest',
+    });
+
+    expect(api.uploadCover).not.toHaveBeenCalled();
+    expect(api.createDraft).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'frontmatter title',
+      author: 'frontmatter author',
+      thumb_media_id: 'thumb-from-frontmatter',
+      content_source_url: 'https://example.com/frontmatter',
+      need_open_comment: 1,
+      only_fans_can_comment: 1,
+    }));
+  });
+
   it('should throw when no cover source is available', async () => {
     const service = createWechatSyncService({
       createApi: vi.fn(() => createMockApi()),

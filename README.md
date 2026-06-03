@@ -189,8 +189,9 @@ The plugin does not include client-side telemetry and does not automatically upl
 ## 📖 使用方法
 
 1. **唤起插件**
-   - 点击 Obsidian 左侧边栏的 🪄 图标 (WeChat Converter)。
+   - 点击 Obsidian 左侧边栏的消息图标 (WeChat Converter)。
    - 或使用命令面板 (`Cmd/Ctrl + P`) 搜索并执行 "Open Wechat Converter"。
+   - 也可以在文件列表中右键 Markdown 文件、文件夹或多选文件，选择“用发布助手发布”；多选或文件夹场景可选择“合并到发布助手”，插件会先让你确认合并顺序，再合并为一篇临时发布稿。
 
 2. **预览与调整**
    - 插件会自动加载当前激活的笔记内容。
@@ -208,8 +209,11 @@ The plugin does not include client-side telemetry and does not automatically upl
      - 默认开启留言
      - 默认仅粉丝可留言
    - 默认值读取规则：
+     - 标题可读 `title` 或 `标题`
+     - 作者可读 `author` 或 `作者`
      - 摘要优先读 `excerpt`
      - 封面优先读 `cover`
+     - 兼容 NoteToMP 风格中文字段：`摘要`、`原文地址`、`封面`、`封面素材ID`、`打开评论`、`仅粉丝可评论`
      - `cover_dir` 用于同步成功后的“自动清理目录”判断，不作为封面图来源
      - 如果没有，就自动回退到插件默认逻辑（摘要自动截取、封面取正文首图）
    - 你在弹窗里手动上传封面、手动改摘要，始终优先于自动值。
@@ -536,7 +540,7 @@ The plugin does not include client-side telemetry and does not automatically upl
 
 ## 🚀 安装
 
-1. 从 [GitHub Releases](https://github.com/DavidLam-oss/obsidian-wechat-converter/releases) 下载最新的 `obsidian-wechat-converter.zip` 插件包。
+1. 从 [GitHub Releases](https://github.com/destineylu/obsidian-wechat-converter/releases) 下载最新的 `obsidian-wechat-converter.zip` 插件包。
 2. 解压并将其中的文件夹放入 Obsidian vault 的 `.obsidian/plugins/` 目录中。
    > 最终路径应为：`.../.obsidian/plugins/obsidian-wechat-converter/`
 3. 确保文件夹内至少包含以下文件（三件套运行时）：
@@ -550,7 +554,7 @@ The plugin does not include client-side telemetry and does not automatically upl
 如果你使用 BRAT 管理插件更新：
 
 1. 安装并启用 BRAT 插件。
-2. 在 BRAT 中添加仓库：`DavidLam-oss/obsidian-wechat-converter`。
+2. 在 BRAT 中添加仓库：`destineylu/obsidian-wechat-converter`。
 3. 安装后执行一次冒烟检查：
    - 打开转换面板
    - 预览渲染
@@ -558,6 +562,8 @@ The plugin does not include client-side telemetry and does not automatically upl
    - （可选）一键同步到草稿箱
 
 > 说明：当前版本已支持标准三件套运行时，BRAT 更新路径与 Obsidian 插件标准发布方式一致。
+>
+> 如果你之前通过 BRAT 安装的是 `DavidLam-oss/obsidian-wechat-converter`，建议改为安装本 fork。旧官方包升级时会重新覆盖本地 `main.js`，可能把本 fork 已修复的 WeChat Converter 视图标识、命令 id 和图标恢复成 AppleStyle 的旧标识。
 
 
 ## 🤝 贡献 (Contributing)
